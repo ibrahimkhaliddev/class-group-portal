@@ -40,8 +40,24 @@ for i, group in [(0,1),(1,1),(2,1),(3,1),(4,2),(5,2)]:
 assert 'Student 2' in page(students[4], 'groups')
 assert 'You joined the group' in post(students[1], 'groups', 'join', {'group_id':'2'})
 assert 'You joined the group' in post(students[1], 'groups', 'join', {'group_id':'1'})
+assert 'Personal details' in page(students[0], 'profile')
+assert 'This roll number is already registered' in post(students[0], 'profile', 'save-details', {'name':'Wrong Change','roll':'ROLL02'})
+assert 'Student 1' in page(students[0], 'profile')
+assert 'Your details were updated' in post(students[0], 'profile', 'save-details', {'name':'Corrected Student','roll':'NEW01'})
+assert 'Corrected Student' in page(students[1], 'groups')
+with sqlite3.connect('private/portal.sqlite') as db:
+    student_id, saved_group = db.execute('SELECT id,group_id FROM students WHERE roll_number=? AND name=?', ('NEW01','Corrected Student')).fetchone()
+    saved_answers = db.execute('SELECT COUNT(*) FROM answers WHERE student_id=?', (student_id,)).fetchone()[0]
+assert saved_group == 1 and saved_answers == 8
+assert 'Roll number or PIN is incorrect' in post(requests.Session(), 'student-login', 'student-login', {'roll':'ROLL01','pin':'123456'})
+assert 'Corrected Student' in post(requests.Session(), 'student-login', 'student-login', {'roll':'NEW01','pin':'123456'})
 
 assert 'Groups are locked' in post(admin, 'admin', 'lock', {})
+assert 'Your details were updated' in post(students[0], 'profile', 'save-details', {'name':'Corrected Student Again','roll':'NEW02'})
+with sqlite3.connect('private/portal.sqlite') as db:
+    locked_group = db.execute('SELECT group_id FROM students WHERE id=? AND roll_number=?', (student_id,'NEW02')).fetchone()
+    locked_answers = db.execute('SELECT COUNT(*) FROM answers WHERE student_id=?', (student_id,)).fetchone()[0]
+assert locked_group == (1,) and locked_answers == saved_answers
 assert 'Groups are locked by an admin' in post(students[0], 'groups', 'leave', {})
 assert 'Groups are locked' in post(admin, 'admin', 'move-student', {'student_id':'6','group_id':'1'})
 assert 'Unlock groups before adding a student' in post(admin, 'admin', 'add-student', {'name':'Added Student','roll':'ADDED01','pin':'123456','group_id':'3'})
@@ -67,4 +83,4 @@ assert archived_at is not None and saved_group == previous_group and saved_answe
 assert 'Roll number or PIN is incorrect' in post(requests.Session(), 'student-login', 'student-login', {'roll':'ADDED01','pin':'123456'})
 assert 'Student restored' in post(admin, 'admin', 'restore-student', {'student_id':str(added_id)})
 assert 'Group 3' in post(requests.Session(), 'student-login', 'student-login', {'roll':'ADDED01','pin':'123456'})
-print('Setup, registration, groups, lock, admin-added student, reversible removal, and retained answers passed.')
+print('Setup, registration, profile edits, groups, lock, admin-added student, reversible removal, and retained answers passed.')

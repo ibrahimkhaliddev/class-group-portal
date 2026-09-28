@@ -221,6 +221,20 @@ function handle_post(): void
         session_regenerate_id(true); $_SESSION['admin_id'] = (int)$a['id']; unset($_SESSION['student_id']); go('admin');
     }
     if ($action === 'logout') { $_SESSION = []; session_regenerate_id(true); flash('You have signed out.'); go('home'); }
+    if ($action === 'save-details') {
+        $s = require_student();
+        $name = trim((string)($_POST['name'] ?? ''));
+        $roll = strtoupper(trim((string)($_POST['roll'] ?? '')));
+        if (mb_strlen($name) < 2 || mb_strlen($name) > 80) throw new RuntimeException('Enter your full name (2–80 characters).');
+        if (!preg_match('/^[A-Z0-9][A-Z0-9\/-]{1,29}$/', $roll)) throw new RuntimeException('Enter a valid roll number.');
+        $pdo = db(); $pdo->exec('BEGIN IMMEDIATE');
+        try {
+            if (one('SELECT id FROM students WHERE roll_number = ? AND id <> ?', [$roll, (int)$s['id']])) throw new RuntimeException('This roll number is already registered.');
+            run('UPDATE students SET name = ?, roll_number = ? WHERE id = ? AND archived_at IS NULL', [$name, $roll, (int)$s['id']]);
+            $pdo->exec('COMMIT');
+        } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
+        flash('Your details were updated.'); go('profile');
+    }
     if (in_array($action, ['join','leave','save-answers'], true)) {
         $s = require_student();
         if (locked()) throw new RuntimeException('Groups are locked by an admin.');

@@ -15,7 +15,7 @@ The repository includes a fresh, empty SQLite **starter** database with the defa
 
 ## How it works
 
-- Students can register while selection is open, see who is in every group, join groups with open places, switch groups, leave groups, and edit their skill answers.
+- Students can register while selection is open, see who is in every group, join groups with open places, switch groups, leave groups, and edit their name, roll number, and skill answers. Name and roll number can be corrected even after group selection is locked; group membership and skill answers stay in place.
 - Students sign back in using their roll number and PIN.
 - An admin can add students with a temporary PIN and optionally assign a group, add another admin, add or hide questions, move students, and lock or unlock group selection. Admin-added students sign in with their roll number and PIN and complete their own skills questionnaire.
 - An admin can remove a student from the active class and restore them later. Removal is reversible: the student row, answers, PIN hash, and previous group remain in the live SQLite file. Removed students cannot sign in or occupy a group seat until restored. The live database is never reset by this feature.
