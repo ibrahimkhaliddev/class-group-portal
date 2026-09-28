@@ -106,5 +106,5 @@ function member_label(array $member): string { return $member['name'] . ' · ' .
 <?php elseif ($page === 'questions'): ?>
   <div class="page-intro"><div class="eyebrow">QUESTIONNAIRE</div><h1>Skill questions</h1><p>Students choose one confidence level for each active question.</p></div><div class="two-col"><div class="card"><h2>Add a question</h2><?php form_start('add-question','questions','stack'); ?><label>Skill or topic<input name="label" required minlength="3" maxlength="90" placeholder="e.g. Data analysis"></label><button class="button" type="submit">Add question</button></form></div><div class="card"><h2>All questions</h2><ul class="question-list"><?php foreach (rows('SELECT * FROM questions ORDER BY position,id') as $q): ?><li><span><?= h($q['label']) ?><small><?= $q['active'] ? 'Active' : 'Hidden from new responses' ?></small></span><?php form_start('toggle-question','questions'); ?><input type="hidden" name="question_id" value="<?= (int)$q['id'] ?>"><button class="text-button" type="submit"><?= $q['active'] ? 'Hide' : 'Show' ?></button></form></li><?php endforeach; ?></ul></div></div>
 <?php endif; ?>
-</main><footer class="site-footer"><div class="wrap">Class Groups <span>·</span> A simple place to get organized.</div></footer>
+</main><footer class="site-footer"><div class="wrap">Developed by Ibrahim Khalid</div></footer>
 </body></html>
