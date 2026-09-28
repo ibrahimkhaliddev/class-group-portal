@@ -31,6 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $hasAdmin = (int)one('SELECT COUNT(*) AS n FROM admins')['n'] > 0;
 if (!$hasAdmin && $page !== 'setup') go('setup');
 if ($hasAdmin && $page === 'setup') go('home');
+if ($page === 'home' && student()) go('groups');
 if (in_array($page,['groups','profile'],true)) $currentStudent = require_student();
 if (in_array($page,['admin','admins','questions'],true)) $currentAdmin = require_admin();
 $notice = $_SESSION['flash'] ?? null; unset($_SESSION['flash']);

@@ -21,6 +21,7 @@ admin = requests.Session()
 assert 'Create the first admin' in page(admin, 'home')
 assert 'Class overview' in post(admin, 'setup', 'setup', {'setup_code':Path('.setup-code.txt').read_text().strip(),'username':'classadmin','password':'StrongPass1234!'})
 assert 'Admin added' in post(admin, 'admins', 'add-admin', {'username':'helper','password':'AnotherPass1234!'})
+assert 'Find your group' in requests.Session().get('http://127.0.0.1:8123/').text
 
 students = []
 for i in range(1, 7):
@@ -31,6 +32,12 @@ for i in range(1, 7):
     })
     assert 'Choose your group' in html, (i, html[:300])
     students.append(s)
+
+root_response = students[0].get('http://127.0.0.1:8123/')
+assert root_response.url == BASE + 'groups'
+assert root_response.history and root_response.history[0].status_code == 302
+assert 'Choose your group' in root_response.text
+assert students[0].get(BASE + 'home').url == BASE + 'groups'
 
 assert 'Group 1' in page(students[0], 'groups')
 assert 'Group 10' in page(students[0], 'groups')
@@ -83,4 +90,4 @@ assert archived_at is not None and saved_group == previous_group and saved_answe
 assert 'Roll number or PIN is incorrect' in post(requests.Session(), 'student-login', 'student-login', {'roll':'ADDED01','pin':'123456'})
 assert 'Student restored' in post(admin, 'admin', 'restore-student', {'student_id':str(added_id)})
 assert 'Group 3' in post(requests.Session(), 'student-login', 'student-login', {'roll':'ADDED01','pin':'123456'})
-print('Setup, registration, profile edits, groups, lock, admin-added student, reversible removal, and retained answers passed.')
+print('Setup, registration, student home redirect, profile edits, groups, lock, admin-added student, reversible removal, and retained answers passed.')
