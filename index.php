@@ -17,6 +17,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = 'That username or roll number is already in use.';
             } elseif (str_contains($detail, 'database is locked')) {
                 $message = 'The database is busy. Please try again in a moment.';
+            } elseif ($page === 'setup') {
+                $message = 'Setup database error: ' . $message;
             } else {
                 $message = 'The database could not save this. Run hosting-check.php to check the hosting setup.';
             }

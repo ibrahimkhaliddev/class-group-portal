@@ -133,8 +133,8 @@ function membership_change(int $studentId, ?int $groupId): void
         }
         run('UPDATE students SET group_id = ? WHERE id = ?', [$groupId, $studentId]);
         $pdo->exec('DELETE FROM groups WHERE id NOT IN (SELECT DISTINCT group_id FROM students WHERE group_id IS NOT NULL)');
-        $pdo->commit();
-    } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
+        $pdo->exec('COMMIT');
+    } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
 }
 
 function handle_post(): void
@@ -152,8 +152,8 @@ function handle_post(): void
             if ((int)one('SELECT COUNT(*) AS n FROM admins')['n'] > 0) throw new RuntimeException('Setup is already complete.');
             run('INSERT INTO admins(username,password_hash) VALUES(?,?)', [$username, password_hash($password, PASSWORD_DEFAULT)]);
             run("DELETE FROM settings WHERE key = 'setup_code_hash'");
-            $id = (int)$pdo->lastInsertId(); $pdo->commit();
-        } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
+            $id = (int)$pdo->lastInsertId(); $pdo->exec('COMMIT');
+        } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
         session_regenerate_id(true); $_SESSION['admin_id'] = $id; unset($_SESSION['student_id']);
         flash('Admin account created.'); go('admin');
     }
@@ -169,8 +169,8 @@ function handle_post(): void
             if ((int)one('SELECT COUNT(*) AS n FROM students')['n'] >= 40) throw new RuntimeException('The class limit of 40 students has been reached.');
             if (one('SELECT id FROM students WHERE roll_number = ?', [$roll])) throw new RuntimeException('This roll number is already registered. Sign in instead.');
             run('INSERT INTO students(name,roll_number,pin_hash) VALUES(?,?,?)', [$name,$roll,password_hash($pin,PASSWORD_DEFAULT)]);
-            $id = (int)$pdo->lastInsertId(); take_answers($id); $pdo->commit();
-        } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
+            $id = (int)$pdo->lastInsertId(); take_answers($id); $pdo->exec('COMMIT');
+        } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
         session_regenerate_id(true); $_SESSION['student_id'] = $id; unset($_SESSION['admin_id']);
         flash('Your profile is ready. Choose a group.'); go('groups');
     }
@@ -203,8 +203,8 @@ function handle_post(): void
             run('INSERT INTO groups(name,created_by) VALUES(?,?)', [$name,(int)$s['id']]);
             $groupId = (int)$pdo->lastInsertId(); run('UPDATE students SET group_id = ? WHERE id = ?', [$groupId,(int)$s['id']]);
             $pdo->exec('DELETE FROM groups WHERE id != ' . $groupId . ' AND id NOT IN (SELECT DISTINCT group_id FROM students WHERE group_id IS NOT NULL)');
-            $pdo->commit();
-        } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
+            $pdo->exec('COMMIT');
+        } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
         flash('Group created. Invite classmates to join.'); go('groups');
     }
     $a = require_admin();
@@ -219,8 +219,8 @@ function handle_post(): void
             $bad = rows('SELECT g.name, COUNT(s.id) AS n FROM groups g LEFT JOIN students s ON s.group_id = g.id GROUP BY g.id HAVING n < 2 OR n > 4');
             $ungrouped = (int)one('SELECT COUNT(*) AS n FROM students WHERE group_id IS NULL')['n'];
             if ($bad || $ungrouped || (int)one('SELECT COUNT(*) AS n FROM groups')['n'] === 0) throw new RuntimeException('Assign every registered student and make sure every group has 2–4 members before locking.');
-            run("UPDATE settings SET value = '1' WHERE key = 'groups_locked'"); $pdo->commit();
-        } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
+            run("UPDATE settings SET value = '1' WHERE key = 'groups_locked'"); $pdo->exec('COMMIT');
+        } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
         flash('Groups are locked. Students can only view them.'); go('admin');
     }
     if ($action === 'unlock') { run("UPDATE settings SET value = '0' WHERE key = 'groups_locked'"); flash('Group selection is open again.'); go('admin'); }
