@@ -25,6 +25,21 @@ if ($checks['PDO SQLite extension'] && $checks['Starter database is present'] &&
         if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
         $checks['SQLite can save data'] = false;
     }
+    if ($checks['SQLite can save data']) {
+      try {
+        $testUser = '_hosting_check_' . bin2hex(random_bytes(6));
+        $pdo->exec('BEGIN IMMEDIATE');
+        $insert = $pdo->prepare('INSERT INTO admins(username,password_hash) VALUES(?,?)');
+        $insert->execute([$testUser, 'temporary-check']);
+        $delete = $pdo->prepare('DELETE FROM admins WHERE username = ?');
+        $delete->execute([$testUser]);
+        $pdo->exec('COMMIT');
+        $checks['Admin setup transaction'] = true;
+      } catch (Throwable $e) {
+        try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {}
+        $checks['Admin setup transaction'] = false;
+      }
+    }
 }
 
 $ready = !in_array(false, $checks, true);
