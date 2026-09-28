@@ -67,7 +67,7 @@ function check_login_limit(string $identity): void
 function login_failed(string $identity): void
 {
     $attempt = one('SELECT failures, locked_until FROM login_attempts WHERE identity = ?', [$identity]);
-    $failures = $attempt && (int)$attempt['locked_until'] <= time() ? (int)$attempt['failures'] + 1 : 1;
+    $failures = $attempt && (int)$attempt['locked_until'] === 0 ? (int)$attempt['failures'] + 1 : 1;
     $until = $failures >= 5 ? time() + 900 : 0;
     run('INSERT INTO login_attempts(identity,failures,locked_until) VALUES(?,?,?) ON CONFLICT(identity) DO UPDATE SET failures=excluded.failures, locked_until=excluded.locked_until', [$identity,$failures,$until]);
 }
