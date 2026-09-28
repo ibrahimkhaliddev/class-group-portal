@@ -195,7 +195,11 @@ function handle_post(): void
         $s = one('SELECT * FROM students WHERE roll_number = ?', [$roll]);
         if (!$s || !password_verify((string)($_POST['pin'] ?? ''), $s['pin_hash'])) { login_failed($identity); throw new RuntimeException('Roll number or PIN is incorrect.'); }
         run('DELETE FROM login_attempts WHERE identity = ?', [$identity]);
-        session_regenerate_id(true); $_SESSION['student_id'] = (int)$s['id']; unset($_SESSION['admin_id']); go('groups');
+        session_regenerate_id(true); $_SESSION['student_id'] = (int)$s['id']; unset($_SESSION['admin_id']);
+        if ((int)one('SELECT COUNT(*) AS n FROM answers WHERE student_id = ?', [(int)$s['id']])['n'] === 0 && question_rows()) {
+            flash('Please complete your skills questionnaire.'); go('profile');
+        }
+        go('groups');
     }
     if ($action === 'admin-login') {
         $username = trim((string)($_POST['username'] ?? '')); $identity = 'admin:' . strtolower($username); check_login_limit($identity);
@@ -208,11 +212,38 @@ function handle_post(): void
     if (in_array($action, ['join','leave','save-answers'], true)) {
         $s = require_student();
         if (locked()) throw new RuntimeException('Groups are locked by an admin.');
-        if ($action === 'save-answers') { take_answers((int)$s['id']); flash('Your skills were updated.'); go('profile'); }
+        if ($action === 'save-answers') {
+            $firstAnswers = (int)one('SELECT COUNT(*) AS n FROM answers WHERE student_id = ?', [(int)$s['id']])['n'] === 0;
+            take_answers((int)$s['id']); flash('Your skills were updated.'); go($firstAnswers ? 'groups' : 'profile');
+        }
         if ($action === 'join') { membership_change((int)$s['id'], filter_input(INPUT_POST,'group_id',FILTER_VALIDATE_INT) ?: null); flash('You joined the group.'); go('groups'); }
         if ($action === 'leave') { membership_change((int)$s['id'], null); flash('You left the group.'); go('groups'); }
     }
     $a = require_admin();
+    if ($action === 'add-student') {
+        $name = trim((string)($_POST['name'] ?? ''));
+        $roll = strtoupper(trim((string)($_POST['roll'] ?? '')));
+        $pin = (string)($_POST['pin'] ?? '');
+        $groupRaw = trim((string)($_POST['group_id'] ?? ''));
+        $groupId = $groupRaw === '' ? null : filter_var($groupRaw, FILTER_VALIDATE_INT);
+        if (mb_strlen($name) < 2 || mb_strlen($name) > 80) throw new RuntimeException('Enter a full name of 2–80 characters.');
+        if (!preg_match('/^[A-Z0-9][A-Z0-9\/-]{1,29}$/', $roll)) throw new RuntimeException('Enter a valid roll number.');
+        if (!preg_match('/^\d{4,8}$/', $pin)) throw new RuntimeException('Choose a 4–8 digit PIN.');
+        if ($groupId === false) throw new RuntimeException('Choose a valid group.');
+        $pdo = db(); $pdo->exec('BEGIN IMMEDIATE');
+        try {
+            if (locked()) throw new RuntimeException('Unlock groups before adding a student.');
+            if ((int)one('SELECT COUNT(*) AS n FROM students')['n'] >= 40) throw new RuntimeException('The class limit of 40 students has been reached.');
+            if (one('SELECT id FROM students WHERE roll_number = ?', [$roll])) throw new RuntimeException('This roll number is already registered.');
+            if ($groupId !== null) {
+                if (!one('SELECT id FROM groups WHERE id = ?', [$groupId])) throw new RuntimeException('Choose an existing group.');
+                if ((int)one('SELECT COUNT(*) AS n FROM students WHERE group_id = ?', [$groupId])['n'] >= 4) throw new RuntimeException('This group is full. Choose another group.');
+            }
+            run('INSERT INTO students(name,roll_number,pin_hash,group_id) VALUES(?,?,?,?)', [$name,$roll,password_hash($pin,PASSWORD_DEFAULT),$groupId]);
+            $pdo->exec('COMMIT');
+        } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
+        flash('Student added. Give them their roll number and temporary PIN so they can sign in and complete their skills.'); go('admin');
+    }
     if ($action === 'add-admin') {
         $username = trim((string)($_POST['username'] ?? '')); $password = (string)($_POST['password'] ?? '');
         if (!preg_match('/^[a-zA-Z0-9._-]{3,32}$/',$username) || strlen($password) < 10) throw new RuntimeException('Use a username of 3–32 letters or numbers and a password of at least 10 characters.');
