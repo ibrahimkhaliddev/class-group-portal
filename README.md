@@ -18,9 +18,10 @@ The repository includes a fresh, empty SQLite **starter** database with the defa
 - Students can register while selection is open, see who is in every group, join groups with open places, switch groups, leave groups, and edit their skill answers.
 - Students sign back in using their roll number and PIN.
 - An admin can add students with a temporary PIN and optionally assign a group, add another admin, add or hide questions, move students, and lock or unlock group selection. Admin-added students sign in with their roll number and PIN and complete their own skills questionnaire.
+- An admin can remove a student from the active class and restore them later. Removal is reversible: the student row, answers, PIN hash, and previous group remain in the live SQLite file. Removed students cannot sign in or occupy a group seat until restored. The live database is never reset by this feature.
 - The portal provides Group 1 through Group 10 from the start. Empty groups remain available. Existing custom groups are renamed in order when an older live database upgrades, preserving their members.
 - Locking requires every registered student to be assigned and every occupied group to have 2–4 members. Empty pre-created groups do not block locking. Once locked, everyone can view groups but no one can change membership until an admin unlocks them. Registration is also closed while locked.
 
 ## Local development
 
-Run `python create_database.py` to create a new empty database and one-time setup code. This refuses to overwrite an existing database unless passed `--replace`, which **erases all portal data**. Then run `php -S localhost:8000` from this folder. PHP must have the `pdo_sqlite` extension enabled.
+Run `python create_database.py` only when there is no starter database. It refuses to overwrite an existing file. Then run `php -S localhost:8000` from this folder. PHP must have the `pdo_sqlite` extension enabled.

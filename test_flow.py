@@ -1,6 +1,7 @@
 import re
 import requests
 from pathlib import Path
+import sqlite3
 
 BASE = 'http://127.0.0.1:8123/index.php?page='
 
@@ -53,4 +54,17 @@ added = requests.Session()
 assert 'Please complete your skills questionnaire' in post(added, 'student-login', 'student-login', {'roll':'ADDED01','pin':'123456'})
 assert 'Group 3' in post(added, 'profile', 'save-answers', {f'answer[{q}]':'2' for q in range(1,9)})
 assert 'This roll number is already registered' in post(admin, 'admin', 'add-student', {'name':'Duplicate Student','roll':'ADDED01','pin':'123456','group_id':''})
-print('Setup, admin creation, student registration, admin-added student, grouping, capacity, lock, unlock passed.')
+
+with sqlite3.connect('private/portal.sqlite') as db:
+    added_id, previous_group = db.execute('SELECT id,group_id FROM students WHERE roll_number=?', ('ADDED01',)).fetchone()
+    answer_count = db.execute('SELECT COUNT(*) FROM answers WHERE student_id=?', (added_id,)).fetchone()[0]
+assert answer_count == 8
+assert 'Student removed from the active class' in post(admin, 'admin', 'archive-student', {'student_id':str(added_id)})
+with sqlite3.connect('private/portal.sqlite') as db:
+    archived_at, saved_group = db.execute('SELECT archived_at,group_id FROM students WHERE id=?', (added_id,)).fetchone()
+    saved_answers = db.execute('SELECT COUNT(*) FROM answers WHERE student_id=?', (added_id,)).fetchone()[0]
+assert archived_at is not None and saved_group == previous_group and saved_answers == answer_count
+assert 'Roll number or PIN is incorrect' in post(requests.Session(), 'student-login', 'student-login', {'roll':'ADDED01','pin':'123456'})
+assert 'Student restored' in post(admin, 'admin', 'restore-student', {'student_id':str(added_id)})
+assert 'Group 3' in post(requests.Session(), 'student-login', 'student-login', {'roll':'ADDED01','pin':'123456'})
+print('Setup, registration, groups, lock, admin-added student, reversible removal, and retained answers passed.')

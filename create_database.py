@@ -4,16 +4,12 @@ import hashlib
 import pathlib
 import secrets
 import sqlite3
-import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent
 DB = ROOT / 'seed' / 'portal.sqlite'
 
-if DB.exists() and '--replace' not in sys.argv:
-    raise SystemExit('Database already exists. Use --replace only if you intend to erase all portal data.')
-
 if DB.exists():
-    DB.unlink()
+    raise SystemExit('Starter database already exists. No files were changed.')
 DB.parent.mkdir(exist_ok=True)
 code = secrets.token_urlsafe(24)
 with sqlite3.connect(DB) as connection:

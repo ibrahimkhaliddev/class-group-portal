@@ -59,7 +59,7 @@ function require_csrf(): void
 
 function student(): ?array
 {
-    return isset($_SESSION['student_id']) ? one('SELECT * FROM students WHERE id = ?', [(int)$_SESSION['student_id']]) : null;
+    return isset($_SESSION['student_id']) ? one('SELECT * FROM students WHERE id = ? AND archived_at IS NULL', [(int)$_SESSION['student_id']]) : null;
 }
 
 function admin(): ?array
@@ -97,7 +97,19 @@ function question_rows(): array { return rows('SELECT * FROM questions WHERE act
 
 function group_rows(): array
 {
-    return rows('SELECT g.*, COUNT(s.id) AS member_count FROM groups g LEFT JOIN students s ON s.group_id = g.id GROUP BY g.id ORDER BY g.id');
+    return rows('SELECT g.*, COUNT(s.id) AS member_count FROM groups g LEFT JOIN students s ON s.group_id = g.id AND s.archived_at IS NULL GROUP BY g.id ORDER BY g.id');
+}
+
+function ensure_student_archive_column(): void
+{
+    $columns = array_column(rows('PRAGMA table_info(students)'), 'name');
+    if (in_array('archived_at', $columns, true)) return;
+    $pdo = db(); $pdo->exec('BEGIN IMMEDIATE');
+    try {
+        $columns = array_column(rows('PRAGMA table_info(students)'), 'name');
+        if (!in_array('archived_at', $columns, true)) $pdo->exec('ALTER TABLE students ADD COLUMN archived_at TEXT');
+        $pdo->exec('COMMIT');
+    } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
 }
 
 function ensure_fixed_groups(): void
@@ -141,14 +153,14 @@ function membership_change(int $studentId, ?int $groupId): void
         if ($groupId !== null) {
             $g = one('SELECT id FROM groups WHERE id = ?', [$groupId]);
             if (!$g) throw new RuntimeException('That group no longer exists.');
-            $current = one('SELECT group_id FROM students WHERE id = ?', [$studentId]);
+            $current = one('SELECT group_id FROM students WHERE id = ? AND archived_at IS NULL', [$studentId]);
             if (!$current) throw new RuntimeException('Student not found.');
             if ((int)$current['group_id'] !== $groupId) {
-                $count = (int)one('SELECT COUNT(*) AS n FROM students WHERE group_id = ?', [$groupId])['n'];
+                $count = (int)one('SELECT COUNT(*) AS n FROM students WHERE group_id = ? AND archived_at IS NULL', [$groupId])['n'];
                 if ($count >= 4) throw new RuntimeException('This group is full. Choose another group.');
             }
         }
-        run('UPDATE students SET group_id = ? WHERE id = ?', [$groupId, $studentId]);
+        run('UPDATE students SET group_id = ? WHERE id = ? AND archived_at IS NULL', [$groupId, $studentId]);
         $pdo->exec('COMMIT');
     } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
 }
@@ -167,7 +179,7 @@ function handle_post(): void
         try {
             if ((int)one('SELECT COUNT(*) AS n FROM admins')['n'] > 0) throw new RuntimeException('Setup is already complete.');
             run('INSERT INTO admins(username,password_hash) VALUES(?,?)', [$username, password_hash($password, PASSWORD_DEFAULT)]);
-            run("DELETE FROM settings WHERE key = 'setup_code_hash'");
+            run("UPDATE settings SET value = 'used' WHERE key = 'setup_code_hash'");
             $id = (int)$pdo->lastInsertId(); $pdo->exec('COMMIT');
         } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
         session_regenerate_id(true); $_SESSION['admin_id'] = $id; unset($_SESSION['student_id']);
@@ -182,7 +194,7 @@ function handle_post(): void
         $pdo = db(); $pdo->exec('BEGIN IMMEDIATE');
         try {
             if (locked()) throw new RuntimeException('Student registration is closed while groups are locked.');
-            if ((int)one('SELECT COUNT(*) AS n FROM students')['n'] >= 40) throw new RuntimeException('The class limit of 40 students has been reached.');
+            if ((int)one('SELECT COUNT(*) AS n FROM students WHERE archived_at IS NULL')['n'] >= 40) throw new RuntimeException('The class limit of 40 students has been reached.');
             if (one('SELECT id FROM students WHERE roll_number = ?', [$roll])) throw new RuntimeException('This roll number is already registered. Sign in instead.');
             run('INSERT INTO students(name,roll_number,pin_hash) VALUES(?,?,?)', [$name,$roll,password_hash($pin,PASSWORD_DEFAULT)]);
             $id = (int)$pdo->lastInsertId(); take_answers($id); $pdo->exec('COMMIT');
@@ -192,9 +204,9 @@ function handle_post(): void
     }
     if ($action === 'student-login') {
         $roll = strtoupper(trim((string)($_POST['roll'] ?? ''))); $identity = 'student:' . $roll; check_login_limit($identity);
-        $s = one('SELECT * FROM students WHERE roll_number = ?', [$roll]);
+        $s = one('SELECT * FROM students WHERE roll_number = ? AND archived_at IS NULL', [$roll]);
         if (!$s || !password_verify((string)($_POST['pin'] ?? ''), $s['pin_hash'])) { login_failed($identity); throw new RuntimeException('Roll number or PIN is incorrect.'); }
-        run('DELETE FROM login_attempts WHERE identity = ?', [$identity]);
+        run('UPDATE login_attempts SET failures = 0, locked_until = 0 WHERE identity = ?', [$identity]);
         session_regenerate_id(true); $_SESSION['student_id'] = (int)$s['id']; unset($_SESSION['admin_id']);
         if ((int)one('SELECT COUNT(*) AS n FROM answers WHERE student_id = ?', [(int)$s['id']])['n'] === 0 && question_rows()) {
             flash('Please complete your skills questionnaire.'); go('profile');
@@ -205,7 +217,7 @@ function handle_post(): void
         $username = trim((string)($_POST['username'] ?? '')); $identity = 'admin:' . strtolower($username); check_login_limit($identity);
         $a = one('SELECT * FROM admins WHERE username = ?', [$username]);
         if (!$a || !password_verify((string)($_POST['password'] ?? ''), $a['password_hash'])) { login_failed($identity); throw new RuntimeException('Username or password is incorrect.'); }
-        run('DELETE FROM login_attempts WHERE identity = ?', [$identity]);
+        run('UPDATE login_attempts SET failures = 0, locked_until = 0 WHERE identity = ?', [$identity]);
         session_regenerate_id(true); $_SESSION['admin_id'] = (int)$a['id']; unset($_SESSION['student_id']); go('admin');
     }
     if ($action === 'logout') { $_SESSION = []; session_regenerate_id(true); flash('You have signed out.'); go('home'); }
@@ -233,11 +245,11 @@ function handle_post(): void
         $pdo = db(); $pdo->exec('BEGIN IMMEDIATE');
         try {
             if (locked()) throw new RuntimeException('Unlock groups before adding a student.');
-            if ((int)one('SELECT COUNT(*) AS n FROM students')['n'] >= 40) throw new RuntimeException('The class limit of 40 students has been reached.');
+            if ((int)one('SELECT COUNT(*) AS n FROM students WHERE archived_at IS NULL')['n'] >= 40) throw new RuntimeException('The class limit of 40 students has been reached.');
             if (one('SELECT id FROM students WHERE roll_number = ?', [$roll])) throw new RuntimeException('This roll number is already registered.');
             if ($groupId !== null) {
                 if (!one('SELECT id FROM groups WHERE id = ?', [$groupId])) throw new RuntimeException('Choose an existing group.');
-                if ((int)one('SELECT COUNT(*) AS n FROM students WHERE group_id = ?', [$groupId])['n'] >= 4) throw new RuntimeException('This group is full. Choose another group.');
+                if ((int)one('SELECT COUNT(*) AS n FROM students WHERE group_id = ? AND archived_at IS NULL', [$groupId])['n'] >= 4) throw new RuntimeException('This group is full. Choose another group.');
             }
             run('INSERT INTO students(name,roll_number,pin_hash,group_id) VALUES(?,?,?,?)', [$name,$roll,password_hash($pin,PASSWORD_DEFAULT),$groupId]);
             $pdo->exec('COMMIT');
@@ -249,12 +261,34 @@ function handle_post(): void
         if (!preg_match('/^[a-zA-Z0-9._-]{3,32}$/',$username) || strlen($password) < 10) throw new RuntimeException('Use a username of 3–32 letters or numbers and a password of at least 10 characters.');
         run('INSERT INTO admins(username,password_hash) VALUES(?,?)', [$username,password_hash($password,PASSWORD_DEFAULT)]); flash('Admin added.'); go('admins');
     }
+    if ($action === 'archive-student' || $action === 'restore-student') {
+        $studentId = filter_input(INPUT_POST, 'student_id', FILTER_VALIDATE_INT);
+        if (!$studentId) throw new RuntimeException('Choose a student.');
+        $pdo = db(); $pdo->exec('BEGIN IMMEDIATE');
+        try {
+            if (locked()) throw new RuntimeException('Unlock groups before changing student accounts.');
+            $target = one('SELECT id, group_id, archived_at FROM students WHERE id = ?', [$studentId]);
+            if (!$target) throw new RuntimeException('Student not found.');
+            if ($action === 'archive-student') {
+                if ($target['archived_at'] !== null) throw new RuntimeException('This student is already removed from the active class.');
+                run('UPDATE students SET archived_at = CURRENT_TIMESTAMP WHERE id = ?', [$studentId]);
+            } else {
+                if ($target['archived_at'] === null) throw new RuntimeException('This student is already active.');
+                if ((int)one('SELECT COUNT(*) AS n FROM students WHERE archived_at IS NULL')['n'] >= 40) throw new RuntimeException('The class limit of 40 active students has been reached.');
+                if ($target['group_id'] !== null && (int)one('SELECT COUNT(*) AS n FROM students WHERE group_id = ? AND archived_at IS NULL', [(int)$target['group_id']])['n'] >= 4) throw new RuntimeException('Their previous group is full. Make space before restoring this student.');
+                run('UPDATE students SET archived_at = NULL WHERE id = ?', [$studentId]);
+            }
+            $pdo->exec('COMMIT');
+        } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
+        flash($action === 'archive-student' ? 'Student removed from the active class. Their profile, answers, and group history are saved below.' : 'Student restored with their existing profile and group.');
+        go('admin');
+    }
     if ($action === 'lock') {
         $pdo = db(); $pdo->exec('BEGIN IMMEDIATE');
         try {
-            $bad = rows('SELECT g.name, COUNT(s.id) AS n FROM groups g LEFT JOIN students s ON s.group_id = g.id GROUP BY g.id HAVING n > 0 AND (n < 2 OR n > 4)');
-            $ungrouped = (int)one('SELECT COUNT(*) AS n FROM students WHERE group_id IS NULL')['n'];
-            if ($bad || $ungrouped || (int)one('SELECT COUNT(*) AS n FROM students')['n'] === 0) throw new RuntimeException('Assign every registered student and make sure each occupied group has 2–4 members before locking.');
+            $bad = rows('SELECT g.name, COUNT(s.id) AS n FROM groups g LEFT JOIN students s ON s.group_id = g.id AND s.archived_at IS NULL GROUP BY g.id HAVING n > 0 AND (n < 2 OR n > 4)');
+            $ungrouped = (int)one('SELECT COUNT(*) AS n FROM students WHERE group_id IS NULL AND archived_at IS NULL')['n'];
+            if ($bad || $ungrouped || (int)one('SELECT COUNT(*) AS n FROM students WHERE archived_at IS NULL')['n'] === 0) throw new RuntimeException('Assign every registered student and make sure each occupied group has 2–4 members before locking.');
             run("UPDATE settings SET value = '1' WHERE key = 'groups_locked'"); $pdo->exec('COMMIT');
         } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
         flash('Groups are locked. Students can only view them.'); go('admin');

@@ -31,13 +31,11 @@ if ($checks['PDO SQLite extension'] && $checks['Starter database is present'] &&
         $pdo->exec('BEGIN IMMEDIATE');
         $insert = $pdo->prepare('INSERT INTO admins(username,password_hash) VALUES(?,?)');
         $insert->execute([$testUser, 'temporary-check']);
-        $delete = $pdo->prepare('DELETE FROM admins WHERE username = ?');
-        $delete->execute([$testUser]);
-        $pdo->exec('COMMIT');
-        $checks['Admin setup transaction'] = true;
+        $pdo->exec('ROLLBACK');
+        $checks['Admin table accepts writes'] = true;
       } catch (Throwable $e) {
         try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {}
-        $checks['Admin setup transaction'] = false;
+        $checks['Admin table accepts writes'] = false;
       }
     }
 }

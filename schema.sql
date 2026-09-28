@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS students (
     roll_number TEXT NOT NULL UNIQUE COLLATE NOCASE,
     pin_hash TEXT NOT NULL,
     group_id INTEGER REFERENCES groups(id) ON DELETE SET NULL,
+    archived_at TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
