@@ -2,17 +2,20 @@
 declare(strict_types=1);
 
 $db = __DIR__ . '/private/portal.sqlite';
+$seed = __DIR__ . '/seed/portal.sqlite';
 $checks = [
     'PHP 8.1 or newer' => version_compare(PHP_VERSION, '8.1.0', '>='),
     'PDO SQLite extension' => extension_loaded('pdo_sqlite'),
     'Multibyte text extension' => extension_loaded('mbstring'),
-    'Database file is present' => is_file($db),
+    'Starter database is present' => is_file($seed),
     'Private folder is writable' => is_writable(dirname($db)),
-    'Database file is writable' => is_writable($db),
 ];
 
-if ($checks['PDO SQLite extension'] && $checks['Database file is present']) {
+if ($checks['PDO SQLite extension'] && $checks['Starter database is present'] && $checks['Private folder is writable']) {
     try {
+        require __DIR__ . '/app.php';
+        db();
+        $checks['Live database is writable'] = is_writable($db);
         $pdo = new PDO('sqlite:' . $db, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
         $checks['SQLite file opens'] = (int)$pdo->query('SELECT COUNT(*) FROM questions')->fetchColumn() >= 0;
     } catch (Throwable $e) {

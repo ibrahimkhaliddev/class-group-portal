@@ -3,3 +3,6 @@
 private/*.sqlite-journal
 private/*.sqlite-wal
 private/*.sqlite-shm
+private/portal.sqlite
+private/install.lock
+private/*.new

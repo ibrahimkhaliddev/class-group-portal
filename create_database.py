@@ -7,7 +7,7 @@ import sqlite3
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent
-DB = ROOT / 'private' / 'portal.sqlite'
+DB = ROOT / 'seed' / 'portal.sqlite'
 
 if DB.exists() and '--replace' not in sys.argv:
     raise SystemExit('Database already exists. Use --replace only if you intend to erase all portal data.')
@@ -21,4 +21,4 @@ with sqlite3.connect(DB) as connection:
     connection.execute('INSERT INTO settings(key,value) VALUES(?,?)', ('setup_code_hash', hashlib.sha256(code.encode()).hexdigest()))
 
 (ROOT / '.setup-code.txt').write_text(code + '\n', encoding='utf-8')
-print('Created fresh database. The one-time admin setup code is in .setup-code.txt (excluded from Git).')
+print('Created fresh starter database. The one-time admin setup code is in .setup-code.txt (excluded from Git).')

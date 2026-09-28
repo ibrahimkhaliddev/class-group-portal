@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 const DB_FILE = __DIR__ . '/private/portal.sqlite';
+const SEED_DB_FILE = __DIR__ . '/seed/portal.sqlite';
 const LEVELS = ['Just starting', 'Some experience', 'Comfortable', 'Very confident'];
 
 function db(): PDO
@@ -9,6 +10,16 @@ function db(): PDO
     static $pdo = null;
     if ($pdo instanceof PDO) return $pdo;
     if (!extension_loaded('pdo_sqlite')) throw new RuntimeException('SQLite support is not enabled in PHP. Enable pdo_sqlite on your hosting account.');
+    if (!is_file(DB_FILE)) {
+        $lock = fopen(__DIR__ . '/private/install.lock', 'c');
+        if (!$lock || !flock($lock, LOCK_EX)) throw new RuntimeException('The database folder is not writable.');
+        try {
+            if (!is_file(DB_FILE)) {
+                $temp = DB_FILE . '.new';
+                if (!copy(SEED_DB_FILE, $temp) || !rename($temp, DB_FILE)) throw new RuntimeException('Could not create the live database from the included starter file.');
+            }
+        } finally { flock($lock, LOCK_UN); fclose($lock); }
+    }
     $pdo = new PDO('sqlite:' . DB_FILE, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
     $pdo->exec('PRAGMA foreign_keys = ON');
     $pdo->exec('PRAGMA busy_timeout = 5000');

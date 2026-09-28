@@ -6,12 +6,12 @@ A small PHP and SQLite portal for a class of up to 40 students. Students registe
 
 1. Use hosting that runs PHP 8.1 or later with **PDO SQLite** and **mbstring** enabled. The site needs writable, persistent files. A static site plan will not work.
 2. Upload the contents of this repository into the domain's `public_html` directory, preserving the `private` folder and both `.htaccess` files.
-3. Open `/hosting-check.php` on the new domain. Every item must say **Pass**. If PDO SQLite is missing, the current portal cannot run on that account. Make sure PHP can write to `private/portal.sqlite` and the `private` directory. Do not replace the database file when deploying updates after students have registered.
+3. Open `/hosting-check.php` on the new domain. Every item must say **Pass**. If PDO SQLite is missing, the current portal cannot run on that account. The check creates the live database in `private/portal.sqlite` from the starter database in `seed/portal.sqlite`. PHP must be able to write to the `private` directory.
 4. Open the domain. The first visit leads to the one-time admin setup page. Enter the separate setup code supplied by the project owner, then create a strong admin password. The setup code itself is not in GitHub.
 5. Check that `https://your-domain/private/portal.sqlite` returns **403 Forbidden**. If it downloads, stop using the portal until the hosting server is configured to block access to `private`.
 6. Delete `hosting-check.php` from the server after these checks pass.
 
-The repository includes a fresh, empty SQLite database with the default questions. It does **not** contain an admin password or student data. After launch, keep backups of `private/portal.sqlite` outside the web directory. Do not commit a live database containing student records or admin password hashes back to a public GitHub repository.
+The repository includes a fresh, empty SQLite **starter** database with the default questions. It does **not** contain an admin password or student data. The live `private/portal.sqlite` is excluded from Git so ordinary code updates do not replace it. After launch, keep backups of the live database outside the web directory. Changing or disconnecting the Git deployment can still affect files in `public_html`; back up the live database before doing either. Do not commit a live database containing student records or admin password hashes to a public GitHub repository.
 
 ## How it works
 
