@@ -1,0 +1,5 @@
+.setup-code.txt
+*.png
+private/*.sqlite-journal
+private/*.sqlite-wal
+private/*.sqlite-shm
