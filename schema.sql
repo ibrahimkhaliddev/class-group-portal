@@ -49,6 +49,9 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 );
 
 INSERT OR IGNORE INTO settings(key,value) VALUES('groups_locked','0');
+INSERT OR IGNORE INTO settings(key,value) VALUES('fixed_groups_ready','1');
+
+INSERT OR IGNORE INTO groups(name) VALUES('Group 1'),('Group 2'),('Group 3'),('Group 4'),('Group 5'),('Group 6'),('Group 7'),('Group 8'),('Group 9'),('Group 10');
 
 INSERT INTO questions(label,position) SELECT 'MS Word and formatting',1 WHERE NOT EXISTS (SELECT 1 FROM questions);
 INSERT INTO questions(label,position) SELECT 'Writing and documentation',2 WHERE (SELECT COUNT(*) FROM questions)=1;

@@ -100,6 +100,23 @@ function group_rows(): array
     return rows('SELECT g.*, COUNT(s.id) AS member_count FROM groups g LEFT JOIN students s ON s.group_id = g.id GROUP BY g.id ORDER BY g.id');
 }
 
+function ensure_fixed_groups(): void
+{
+    if ((one("SELECT value FROM settings WHERE key = 'fixed_groups_ready'")['value'] ?? '') === '1') return;
+    $pdo = db(); $pdo->exec('BEGIN IMMEDIATE');
+    try {
+        if ((one("SELECT value FROM settings WHERE key = 'fixed_groups_ready'")['value'] ?? '') !== '1') {
+            $existing = rows('SELECT id FROM groups ORDER BY id');
+            $prefix = '__group_upgrade_' . bin2hex(random_bytes(6)) . '_';
+            foreach ($existing as $g) run('UPDATE groups SET name = ? WHERE id = ?', [$prefix . $g['id'], $g['id']]);
+            foreach ($existing as $index => $g) run('UPDATE groups SET name = ? WHERE id = ?', ['Group ' . ($index + 1), $g['id']]);
+            for ($i = count($existing) + 1; $i <= 10; $i++) run('INSERT INTO groups(name) VALUES(?)', ['Group ' . $i]);
+            run("INSERT INTO settings(key,value) VALUES('fixed_groups_ready','1') ON CONFLICT(key) DO UPDATE SET value='1'");
+        }
+        $pdo->exec('COMMIT');
+    } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
+}
+
 function skill_summary(int $studentId): string
 {
     $skills = rows('SELECT q.label FROM answers a JOIN questions q ON q.id = a.question_id WHERE a.student_id = ? AND a.level >= 2 ORDER BY a.level DESC, q.position LIMIT 2', [$studentId]);
@@ -132,7 +149,6 @@ function membership_change(int $studentId, ?int $groupId): void
             }
         }
         run('UPDATE students SET group_id = ? WHERE id = ?', [$groupId, $studentId]);
-        $pdo->exec('DELETE FROM groups WHERE id NOT IN (SELECT DISTINCT group_id FROM students WHERE group_id IS NOT NULL)');
         $pdo->exec('COMMIT');
     } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
 }
@@ -172,7 +188,7 @@ function handle_post(): void
             $id = (int)$pdo->lastInsertId(); take_answers($id); $pdo->exec('COMMIT');
         } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
         session_regenerate_id(true); $_SESSION['student_id'] = $id; unset($_SESSION['admin_id']);
-        flash('Your profile is ready. Choose a group.'); go('groups');
+        flash('Your profile is ready. Choose one of the class groups.'); go('groups');
     }
     if ($action === 'student-login') {
         $roll = strtoupper(trim((string)($_POST['roll'] ?? ''))); $identity = 'student:' . $roll; check_login_limit($identity);
@@ -189,23 +205,12 @@ function handle_post(): void
         session_regenerate_id(true); $_SESSION['admin_id'] = (int)$a['id']; unset($_SESSION['student_id']); go('admin');
     }
     if ($action === 'logout') { $_SESSION = []; session_regenerate_id(true); flash('You have signed out.'); go('home'); }
-    if (in_array($action, ['join','leave','create-group','save-answers'], true)) {
+    if (in_array($action, ['join','leave','save-answers'], true)) {
         $s = require_student();
         if (locked()) throw new RuntimeException('Groups are locked by an admin.');
         if ($action === 'save-answers') { take_answers((int)$s['id']); flash('Your skills were updated.'); go('profile'); }
         if ($action === 'join') { membership_change((int)$s['id'], filter_input(INPUT_POST,'group_id',FILTER_VALIDATE_INT) ?: null); flash('You joined the group.'); go('groups'); }
         if ($action === 'leave') { membership_change((int)$s['id'], null); flash('You left the group.'); go('groups'); }
-        $name = trim((string)($_POST['group_name'] ?? ''));
-        if (mb_strlen($name) < 3 || mb_strlen($name) > 40) throw new RuntimeException('Group name must be 3–40 characters.');
-        $pdo = db(); $pdo->exec('BEGIN IMMEDIATE');
-        try {
-            if (locked()) throw new RuntimeException('Groups are locked by an admin.');
-            run('INSERT INTO groups(name,created_by) VALUES(?,?)', [$name,(int)$s['id']]);
-            $groupId = (int)$pdo->lastInsertId(); run('UPDATE students SET group_id = ? WHERE id = ?', [$groupId,(int)$s['id']]);
-            $pdo->exec('DELETE FROM groups WHERE id != ' . $groupId . ' AND id NOT IN (SELECT DISTINCT group_id FROM students WHERE group_id IS NOT NULL)');
-            $pdo->exec('COMMIT');
-        } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
-        flash('Group created. Invite classmates to join.'); go('groups');
     }
     $a = require_admin();
     if ($action === 'add-admin') {
@@ -216,9 +221,9 @@ function handle_post(): void
     if ($action === 'lock') {
         $pdo = db(); $pdo->exec('BEGIN IMMEDIATE');
         try {
-            $bad = rows('SELECT g.name, COUNT(s.id) AS n FROM groups g LEFT JOIN students s ON s.group_id = g.id GROUP BY g.id HAVING n < 2 OR n > 4');
+            $bad = rows('SELECT g.name, COUNT(s.id) AS n FROM groups g LEFT JOIN students s ON s.group_id = g.id GROUP BY g.id HAVING n > 0 AND (n < 2 OR n > 4)');
             $ungrouped = (int)one('SELECT COUNT(*) AS n FROM students WHERE group_id IS NULL')['n'];
-            if ($bad || $ungrouped || (int)one('SELECT COUNT(*) AS n FROM groups')['n'] === 0) throw new RuntimeException('Assign every registered student and make sure every group has 2–4 members before locking.');
+            if ($bad || $ungrouped || (int)one('SELECT COUNT(*) AS n FROM students')['n'] === 0) throw new RuntimeException('Assign every registered student and make sure each occupied group has 2–4 members before locking.');
             run("UPDATE settings SET value = '1' WHERE key = 'groups_locked'"); $pdo->exec('COMMIT');
         } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
         flash('Groups are locked. Students can only view them.'); go('admin');

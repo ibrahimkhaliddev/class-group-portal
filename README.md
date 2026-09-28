@@ -1,6 +1,6 @@
 # Class Groups
 
-A small PHP and SQLite portal for a class of up to 40 students. Students register with a name, roll number and PIN, answer skill questions, and choose their own group. Groups have up to four members and must have at least two before an admin can lock selection.
+A small PHP and SQLite portal for a class of up to 40 students. Students register with a name, roll number and PIN, answer skill questions, and choose from ten pre-created groups. Groups have up to four members and occupied groups must have at least two before an admin can lock selection.
 
 ## Deploy to Hostinger
 
@@ -15,11 +15,11 @@ The repository includes a fresh, empty SQLite **starter** database with the defa
 
 ## How it works
 
-- Students can register while selection is open, create groups, join groups with open places, switch groups, leave groups, and edit their skill answers.
+- Students can register while selection is open, see who is in every group, join groups with open places, switch groups, leave groups, and edit their skill answers.
 - Students sign back in using their roll number and PIN.
 - An admin can add another admin, add or hide questions, move students, and lock or unlock group selection.
-- Locking requires every registered student to be assigned and every group to have 2–4 members. Once locked, everyone can view groups but no one can change membership until an admin unlocks them. Registration is also closed while locked.
-- Empty groups are removed automatically when their last member leaves.
+- The portal provides Group 1 through Group 10 from the start. Empty groups remain available. Existing custom groups are renamed in order when an older live database upgrades, preserving their members.
+- Locking requires every registered student to be assigned and every occupied group to have 2–4 members. Empty pre-created groups do not block locking. Once locked, everyone can view groups but no one can change membership until an admin unlocks them. Registration is also closed while locked.
 
 ## Local development
 

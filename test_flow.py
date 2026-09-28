@@ -31,15 +31,19 @@ for i in range(1, 7):
     assert 'Choose your group' in html, (i, html[:300])
     students.append(s)
 
-assert 'Group created' in post(students[0], 'groups', 'create-group', {'group_name':'Team One'})
-assert 'Group created' in post(students[4], 'groups', 'create-group', {'group_name':'Team Two'})
-for i, group in [(1,1),(2,1),(3,1),(5,2)]:
+assert 'Group 1' in page(students[0], 'groups')
+assert 'Group 10' in page(students[0], 'groups')
+for i, group in [(0,1),(1,1),(2,1),(3,1),(4,2),(5,2)]:
     assert 'You joined the group' in post(students[i], 'groups', 'join', {'group_id':str(group)})
+
+assert 'Student 2' in page(students[4], 'groups')
+assert 'You joined the group' in post(students[1], 'groups', 'join', {'group_id':'2'})
+assert 'You joined the group' in post(students[1], 'groups', 'join', {'group_id':'1'})
 
 assert 'Groups are locked' in post(admin, 'admin', 'lock', {})
 assert 'Groups are locked by an admin' in post(students[0], 'groups', 'leave', {})
 assert 'Groups are locked' in post(admin, 'admin', 'move-student', {'student_id':'6','group_id':'1'})
 assert 'Group selection is open again' in post(admin, 'admin', 'unlock', {})
 assert 'This group is full' in post(admin, 'admin', 'move-student', {'student_id':'6','group_id':'1'})
-assert 'Team Two' in page(students[5], 'groups')
+assert 'Group 2' in page(students[5], 'groups')
 print('Setup, admin creation, registration, grouping, capacity, lock, unlock passed.')
