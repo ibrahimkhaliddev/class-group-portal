@@ -49,7 +49,7 @@ function member_label(array $member): string { return $member['name'] . ' · ' .
 <header class="site-header"><div class="wrap header-inner">
   <a class="brand" href="<?= h(url('home')) ?>"><span class="brand-mark">CG</span><span>Class Groups</span></a>
   <nav aria-label="Main navigation">
-    <?php if (student()): ?><a href="<?= h(url('groups')) ?>">Groups</a><a href="<?= h(url('profile')) ?>">My skills</a>
+    <?php if (student()): ?><a href="<?= h(url('groups')) ?>">Groups</a><a href="<?= h(url('profile')) ?>">Profile</a>
     <?php elseif (admin()): ?><a href="<?= h(url('admin')) ?>">Overview</a><a href="<?= h(url('questions')) ?>">Questions</a><a href="<?= h(url('admins')) ?>">Admins</a>
     <?php else: ?><a href="<?= h(url('student-login')) ?>">Student sign in</a><a href="<?= h(url('admin-login')) ?>">Admin</a><?php endif; ?>
     <?php if (student() || admin()): ?><?php form_start('logout',$page,'nav-form'); ?><button type="submit" class="text-button">Sign out</button></form><?php endif; ?>
