@@ -19,6 +19,9 @@
 .menu-toggle[aria-expanded="true"] .menu-icon span:first-child{transform:translateY(7px) rotate(45deg)}
 .menu-toggle[aria-expanded="true"] .menu-icon span:nth-child(2){opacity:0}
 .menu-toggle[aria-expanded="true"] .menu-icon span:last-child{transform:translateY(-7px) rotate(-45deg)}
+.group-actions{display:flex;align-items:center;gap:18px;flex:none}
+.group-hint{font-size:12px}
+.admin-group>div:first-child{min-width:0}.admin-group strong{overflow-wrap:anywhere}
 @media(max-width:760px){
   .header-inner{min-height:64px;padding:10px 0;flex-direction:row;align-items:center;flex-wrap:wrap;gap:0}
   .brand{min-width:0}
@@ -29,4 +32,6 @@
   .site-header nav a,.site-header nav .text-button{display:flex;align-items:center;width:100%;min-height:44px;padding:10px 12px;border-radius:8px;font-size:14px;text-align:left}
   .site-header nav a:hover,.site-header nav .text-button:hover{background:var(--green-light);text-decoration:none}
   .site-header nav .nav-form{display:block;width:100%}
+  .admin-group{align-items:flex-start}
+  .group-actions{flex-direction:column;align-items:flex-end;gap:4px;text-align:right}
 }

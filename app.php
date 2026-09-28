@@ -97,7 +97,19 @@ function question_rows(): array { return rows('SELECT * FROM questions WHERE act
 
 function group_rows(): array
 {
-    return rows('SELECT g.*, COUNT(s.id) AS member_count FROM groups g LEFT JOIN students s ON s.group_id = g.id AND s.archived_at IS NULL GROUP BY g.id ORDER BY g.id');
+    return rows('SELECT g.*, COUNT(s.id) AS member_count, (SELECT COUNT(*) FROM students linked WHERE linked.group_id = g.id) AS linked_count FROM groups g LEFT JOIN students s ON s.group_id = g.id AND s.archived_at IS NULL WHERE g.archived_at IS NULL GROUP BY g.id ORDER BY g.id');
+}
+
+function ensure_group_archive_column(): void
+{
+    $columns = array_column(rows('PRAGMA table_info(groups)'), 'name');
+    if (in_array('archived_at', $columns, true)) return;
+    $pdo = db(); $pdo->exec('BEGIN IMMEDIATE');
+    try {
+        $columns = array_column(rows('PRAGMA table_info(groups)'), 'name');
+        if (!in_array('archived_at', $columns, true)) $pdo->exec('ALTER TABLE groups ADD COLUMN archived_at TEXT');
+        $pdo->exec('COMMIT');
+    } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
 }
 
 function ensure_student_archive_column(): void
@@ -151,7 +163,7 @@ function membership_change(int $studentId, ?int $groupId): void
     try {
         if (locked()) throw new RuntimeException('Groups are locked. An admin must unlock them before changes can be made.');
         if ($groupId !== null) {
-            $g = one('SELECT id FROM groups WHERE id = ?', [$groupId]);
+            $g = one('SELECT id FROM groups WHERE id = ? AND archived_at IS NULL', [$groupId]);
             if (!$g) throw new RuntimeException('That group no longer exists.');
             $current = one('SELECT group_id FROM students WHERE id = ? AND archived_at IS NULL', [$studentId]);
             if (!$current) throw new RuntimeException('Student not found.');
@@ -246,6 +258,38 @@ function handle_post(): void
         if ($action === 'leave') { membership_change((int)$s['id'], null); flash('You left the group.'); go('groups'); }
     }
     $a = require_admin();
+    if ($action === 'add-group') {
+        $name = trim((string)($_POST['name'] ?? ''));
+        if (mb_strlen($name) < 2 || mb_strlen($name) > 60) throw new RuntimeException('Enter a group name of 2–60 characters.');
+        $pdo = db(); $pdo->exec('BEGIN IMMEDIATE');
+        try {
+            if (locked()) throw new RuntimeException('Unlock groups before adding a group.');
+            if (one('SELECT id FROM groups WHERE name = ? COLLATE NOCASE', [$name])) throw new RuntimeException('This group name already exists. Restore it if it was removed.');
+            run('INSERT INTO groups(name,created_by) VALUES(?,?)', [$name, (int)$a['id']]);
+            $pdo->exec('COMMIT');
+        } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
+        flash('Group created.'); go('admin');
+    }
+    if ($action === 'archive-group' || $action === 'restore-group') {
+        $groupId = filter_input(INPUT_POST, 'group_id', FILTER_VALIDATE_INT);
+        if (!$groupId) throw new RuntimeException('Choose a group.');
+        $pdo = db(); $pdo->exec('BEGIN IMMEDIATE');
+        try {
+            if (locked()) throw new RuntimeException('Unlock groups before changing groups.');
+            $group = one('SELECT id, archived_at FROM groups WHERE id = ?', [$groupId]);
+            if (!$group) throw new RuntimeException('Group not found.');
+            if ($action === 'archive-group') {
+                if ($group['archived_at'] !== null) throw new RuntimeException('This group is already removed.');
+                if ((int)one('SELECT COUNT(*) AS n FROM students WHERE group_id = ?', [$groupId])['n'] > 0) throw new RuntimeException('Move all students out of this group before removing it.');
+                run('UPDATE groups SET archived_at = CURRENT_TIMESTAMP WHERE id = ?', [$groupId]);
+            } else {
+                if ($group['archived_at'] === null) throw new RuntimeException('This group is already active.');
+                run('UPDATE groups SET archived_at = NULL WHERE id = ?', [$groupId]);
+            }
+            $pdo->exec('COMMIT');
+        } catch (Throwable $e) { try { $pdo->exec('ROLLBACK'); } catch (Throwable $ignored) {} throw $e; }
+        flash($action === 'archive-group' ? 'Group removed from the active list. Its record is saved below.' : 'Group restored.'); go('admin');
+    }
     if ($action === 'add-student') {
         $name = trim((string)($_POST['name'] ?? ''));
         $roll = strtoupper(trim((string)($_POST['roll'] ?? '')));
@@ -262,7 +306,7 @@ function handle_post(): void
             if ((int)one('SELECT COUNT(*) AS n FROM students WHERE archived_at IS NULL')['n'] >= 40) throw new RuntimeException('The class limit of 40 students has been reached.');
             if (one('SELECT id FROM students WHERE roll_number = ?', [$roll])) throw new RuntimeException('This roll number is already registered.');
             if ($groupId !== null) {
-                if (!one('SELECT id FROM groups WHERE id = ?', [$groupId])) throw new RuntimeException('Choose an existing group.');
+                if (!one('SELECT id FROM groups WHERE id = ? AND archived_at IS NULL', [$groupId])) throw new RuntimeException('Choose an active group.');
                 if ((int)one('SELECT COUNT(*) AS n FROM students WHERE group_id = ? AND archived_at IS NULL', [$groupId])['n'] >= 4) throw new RuntimeException('This group is full. Choose another group.');
             }
             run('INSERT INTO students(name,roll_number,pin_hash,group_id) VALUES(?,?,?,?)', [$name,$roll,password_hash($pin,PASSWORD_DEFAULT),$groupId]);
@@ -289,6 +333,7 @@ function handle_post(): void
             } else {
                 if ($target['archived_at'] === null) throw new RuntimeException('This student is already active.');
                 if ((int)one('SELECT COUNT(*) AS n FROM students WHERE archived_at IS NULL')['n'] >= 40) throw new RuntimeException('The class limit of 40 active students has been reached.');
+                if ($target['group_id'] !== null && !one('SELECT id FROM groups WHERE id = ? AND archived_at IS NULL', [(int)$target['group_id']])) throw new RuntimeException('Restore their previous group before restoring this student.');
                 if ($target['group_id'] !== null && (int)one('SELECT COUNT(*) AS n FROM students WHERE group_id = ? AND archived_at IS NULL', [(int)$target['group_id']])['n'] >= 4) throw new RuntimeException('Their previous group is full. Make space before restoring this student.');
                 run('UPDATE students SET archived_at = NULL WHERE id = ?', [$studentId]);
             }
@@ -300,7 +345,7 @@ function handle_post(): void
     if ($action === 'lock') {
         $pdo = db(); $pdo->exec('BEGIN IMMEDIATE');
         try {
-            $bad = rows('SELECT g.name, COUNT(s.id) AS n FROM groups g LEFT JOIN students s ON s.group_id = g.id AND s.archived_at IS NULL GROUP BY g.id HAVING n > 0 AND (n < 2 OR n > 4)');
+            $bad = rows('SELECT g.name, COUNT(s.id) AS n FROM groups g LEFT JOIN students s ON s.group_id = g.id AND s.archived_at IS NULL WHERE g.archived_at IS NULL GROUP BY g.id HAVING n > 0 AND (n < 2 OR n > 4)');
             $ungrouped = (int)one('SELECT COUNT(*) AS n FROM students WHERE group_id IS NULL AND archived_at IS NULL')['n'];
             if ($bad || $ungrouped || (int)one('SELECT COUNT(*) AS n FROM students WHERE archived_at IS NULL')['n'] === 0) throw new RuntimeException('Assign every registered student and make sure each occupied group has 2–4 members before locking.');
             run("UPDATE settings SET value = '1' WHERE key = 'groups_locked'"); $pdo->exec('COMMIT');

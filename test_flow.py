@@ -39,6 +39,19 @@ assert root_response.history and root_response.history[0].status_code == 302
 assert 'Choose your group' in root_response.text
 assert students[0].get(BASE + 'home').url == BASE + 'groups'
 
+assert 'Group created' in post(admin, 'admin', 'add-group', {'name':'Group 11'})
+assert 'This group name already exists' in post(admin, 'admin', 'add-group', {'name':'group 11'})
+with sqlite3.connect('private/portal.sqlite') as db:
+    extra_group_id = db.execute('SELECT id FROM groups WHERE name=?', ('Group 11',)).fetchone()[0]
+assert 'Group 11' in page(students[0], 'groups')
+assert 'Group removed from the active list' in post(admin, 'admin', 'archive-group', {'group_id':str(extra_group_id)})
+with sqlite3.connect('private/portal.sqlite') as db:
+    assert db.execute('SELECT archived_at FROM groups WHERE id=?', (extra_group_id,)).fetchone()[0] is not None
+assert 'Group 11' not in page(students[0], 'groups')
+assert 'Group 11' not in page(students[0], 'groups')
+assert 'Group restored' in post(admin, 'admin', 'restore-group', {'group_id':str(extra_group_id)})
+assert 'Group 11' in page(students[0], 'groups')
+
 assert 'Group 1' in page(students[0], 'groups')
 assert 'Group 10' in page(students[0], 'groups')
 for i, group in [(0,1),(1,1),(2,1),(3,1),(4,2),(5,2)]:
@@ -47,6 +60,7 @@ for i, group in [(0,1),(1,1),(2,1),(3,1),(4,2),(5,2)]:
 assert 'Student 2' in page(students[4], 'groups')
 assert 'You joined the group' in post(students[1], 'groups', 'join', {'group_id':'2'})
 assert 'You joined the group' in post(students[1], 'groups', 'join', {'group_id':'1'})
+assert 'Move all students out of this group' in post(admin, 'admin', 'archive-group', {'group_id':'1'})
 assert 'Personal details' in page(students[0], 'profile')
 assert 'This roll number is already registered' in post(students[0], 'profile', 'save-details', {'name':'Wrong Change','roll':'ROLL02'})
 assert 'Student 1' in page(students[0], 'profile')
@@ -60,6 +74,8 @@ assert 'Roll number or PIN is incorrect' in post(requests.Session(), 'student-lo
 assert 'Corrected Student' in post(requests.Session(), 'student-login', 'student-login', {'roll':'NEW01','pin':'123456'})
 
 assert 'Groups are locked' in post(admin, 'admin', 'lock', {})
+assert 'Unlock groups before adding a group' in post(admin, 'admin', 'add-group', {'name':'Group 12'})
+assert 'Unlock groups before changing groups' in post(admin, 'admin', 'archive-group', {'group_id':str(extra_group_id)})
 assert 'Your details were updated' in post(students[0], 'profile', 'save-details', {'name':'Corrected Student Again','roll':'NEW02'})
 with sqlite3.connect('private/portal.sqlite') as db:
     locked_group = db.execute('SELECT group_id FROM students WHERE id=? AND roll_number=?', (student_id,'NEW02')).fetchone()
@@ -83,6 +99,7 @@ with sqlite3.connect('private/portal.sqlite') as db:
     answer_count = db.execute('SELECT COUNT(*) FROM answers WHERE student_id=?', (added_id,)).fetchone()[0]
 assert answer_count == 8
 assert 'Student removed from the active class' in post(admin, 'admin', 'archive-student', {'student_id':str(added_id)})
+assert 'Move all students out of this group' in post(admin, 'admin', 'archive-group', {'group_id':'3'})
 with sqlite3.connect('private/portal.sqlite') as db:
     archived_at, saved_group = db.execute('SELECT archived_at,group_id FROM students WHERE id=?', (added_id,)).fetchone()
     saved_answers = db.execute('SELECT COUNT(*) FROM answers WHERE student_id=?', (added_id,)).fetchone()[0]
@@ -90,4 +107,4 @@ assert archived_at is not None and saved_group == previous_group and saved_answe
 assert 'Roll number or PIN is incorrect' in post(requests.Session(), 'student-login', 'student-login', {'roll':'ADDED01','pin':'123456'})
 assert 'Student restored' in post(admin, 'admin', 'restore-student', {'student_id':str(added_id)})
 assert 'Group 3' in post(requests.Session(), 'student-login', 'student-login', {'roll':'ADDED01','pin':'123456'})
-print('Setup, registration, student home redirect, profile edits, groups, lock, admin-added student, reversible removal, and retained answers passed.')
+print('Setup, registration, student home redirect, profile edits, group creation/removal/restoration, lock, admin-added student, reversible removal, and retained answers passed.')
