@@ -43,12 +43,14 @@ function member_label(array $member): string { return $member['name'] . ' · ' .
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title><?= h($titles[$page]) ?> · Class Groups</title>
-  <link rel="stylesheet" href="style.css">
+  <script>document.documentElement.classList.add('has-js');</script>
+  <link rel="stylesheet" href="style.css?v=<?= (int)filemtime(__DIR__ . '/style.css') ?>">
 </head>
 <body>
 <header class="site-header"><div class="wrap header-inner">
   <a class="brand" href="<?= h(url('home')) ?>"><span class="brand-mark">CG</span><span>Class Groups</span></a>
-  <nav aria-label="Main navigation">
+  <button class="menu-toggle" type="button" aria-controls="site-nav" aria-expanded="false" aria-label="Open menu"><span class="menu-icon" aria-hidden="true"><span></span><span></span><span></span></span></button>
+  <nav id="site-nav" aria-label="Main navigation">
     <?php if (student()): ?><a href="<?= h(url('groups')) ?>">Groups</a><a href="<?= h(url('profile')) ?>">Profile</a>
     <?php elseif (admin()): ?><a href="<?= h(url('admin')) ?>">Overview</a><a href="<?= h(url('questions')) ?>">Questions</a><a href="<?= h(url('admins')) ?>">Admins</a>
     <?php else: ?><a href="<?= h(url('student-login')) ?>">Student sign in</a><a href="<?= h(url('admin-login')) ?>">Admin</a><?php endif; ?>
@@ -124,4 +126,34 @@ function member_label(array $member): string { return $member['name'] . ' · ' .
   <div class="page-intro"><div class="eyebrow">QUESTIONNAIRE</div><h1>Skill questions</h1><p>Students choose one confidence level for each active question.</p></div><div class="two-col"><div class="card"><h2>Add a question</h2><?php form_start('add-question','questions','stack'); ?><label>Skill or topic<input name="label" required minlength="3" maxlength="90" placeholder="e.g. Data analysis"></label><button class="button" type="submit">Add question</button></form></div><div class="card"><h2>All questions</h2><ul class="question-list"><?php foreach (rows('SELECT * FROM questions ORDER BY position,id') as $q): ?><li><span><?= h($q['label']) ?><small><?= $q['active'] ? 'Active' : 'Hidden from new responses' ?></small></span><?php form_start('toggle-question','questions'); ?><input type="hidden" name="question_id" value="<?= (int)$q['id'] ?>"><button class="text-button" type="submit"><?= $q['active'] ? 'Hide' : 'Show' ?></button></form></li><?php endforeach; ?></ul></div></div>
 <?php endif; ?>
 </main><footer class="site-footer"><div class="wrap"><strong class="footer-credit">Developed by Ibrahim Khalid</strong></div></footer>
+<script>
+const menuButton = document.querySelector('.menu-toggle');
+const siteNav = document.querySelector('#site-nav');
+function closeMenu() {
+  menuButton.setAttribute('aria-expanded', 'false');
+  menuButton.setAttribute('aria-label', 'Open menu');
+  siteNav.classList.remove('is-open');
+}
+menuButton.addEventListener('click', () => {
+  const open = menuButton.getAttribute('aria-expanded') !== 'true';
+  menuButton.setAttribute('aria-expanded', String(open));
+  menuButton.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+  siteNav.classList.toggle('is-open', open);
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && menuButton.getAttribute('aria-expanded') === 'true') {
+    closeMenu();
+    menuButton.focus();
+  }
+});
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('.site-header')) closeMenu();
+});
+siteNav.addEventListener('click', (event) => {
+  if (event.target.closest('a')) closeMenu();
+});
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 760) closeMenu();
+});
+</script>
 </body></html>
