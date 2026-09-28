@@ -15,11 +15,15 @@ if ($checks['PDO SQLite extension'] && $checks['Starter database is present'] &&
     try {
         require __DIR__ . '/app.php';
         db();
-        $checks['Live database is writable'] = is_writable($db);
         $pdo = new PDO('sqlite:' . $db, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
         $checks['SQLite file opens'] = (int)$pdo->query('SELECT COUNT(*) FROM questions')->fetchColumn() >= 0;
+        $pdo->beginTransaction();
+        $pdo->exec("INSERT OR REPLACE INTO settings(key,value) VALUES('_hosting_write_test','ok')");
+        $pdo->rollBack();
+        $checks['SQLite can save data'] = true;
     } catch (Throwable $e) {
-        $checks['SQLite file opens'] = false;
+        if (isset($pdo) && $pdo->inTransaction()) $pdo->rollBack();
+        $checks['SQLite can save data'] = false;
     }
 }
 

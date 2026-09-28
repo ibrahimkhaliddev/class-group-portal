@@ -7,7 +7,22 @@ $page = (string)($_GET['page'] ?? 'home');
 $allowed = ['home','register','student-login','admin-login','setup','groups','profile','admin','admins','questions'];
 if (!in_array($page,$allowed,true)) $page = 'home';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    try { handle_post(); } catch (Throwable $e) { flash($e instanceof PDOException ? 'That value is already in use, or the database could not save it.' : $e->getMessage(), 'error'); go($page); }
+    try { handle_post(); } catch (Throwable $e) {
+        $message = $e->getMessage();
+        if ($e instanceof PDOException) {
+            $detail = strtolower($message);
+            if (str_contains($detail, 'readonly') || str_contains($detail, 'unable to open database file') || str_contains($detail, 'disk i/o')) {
+                $message = 'The database is not writable. Check the private folder and portal.sqlite file permissions in Hostinger, then run hosting-check.php.';
+            } elseif (str_contains($detail, 'unique constraint')) {
+                $message = 'That username or roll number is already in use.';
+            } elseif (str_contains($detail, 'database is locked')) {
+                $message = 'The database is busy. Please try again in a moment.';
+            } else {
+                $message = 'The database could not save this. Run hosting-check.php to check the hosting setup.';
+            }
+        }
+        flash($message, 'error'); go($page);
+    }
 }
 $hasAdmin = (int)one('SELECT COUNT(*) AS n FROM admins')['n'] > 0;
 if (!$hasAdmin && $page !== 'setup') go('setup');
